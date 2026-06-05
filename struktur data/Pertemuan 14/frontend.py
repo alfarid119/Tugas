@@ -1,12 +1,64 @@
-import streamlit as st
+"""
+╔══════════════════════════════════════════════════════════════════════╗
+║         FRONTEND — Sistem Antrian STNK Samsat                      ║
+║         Streamlit UI — tampilan identik dengan app.py asli         ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Jalankan (backend harus sudah berjalan di port 8000):
+    pip install streamlit requests
+    streamlit run frontend.py
+"""
+
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║                     BAGIAN 1 — PASYA                               ║
+# ║  Meliputi: Import library, konfigurasi koneksi backend,            ║
+# ║  konstanta warna/ikon/layanan, fungsi API helper, konfigurasi      ║
+# ║  halaman Streamlit, dan seluruh CSS custom tampilan antarmuka.     ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 import os
+import requests
 from datetime import datetime
+import streamlit as st
 
-from queue_system import SistemMultiLoket, LOKET_MAP, DAFTAR_LAYANAN, get_loket, PREFIX_MAP
-from tts_helper import generate_audio_file, buat_pesan_panggil, buat_pesan_daftar, buat_pesan_selesai
-from utils import get_estimasi_waktu, format_waktu_sekarang, get_info_pelayanan, cek_jam_pelayanan
+# ─── Konfigurasi ──────────────────────────────────────────────────────────────
+BASE_URL = "http://localhost:8000"
 
-# ─── Konfigurasi Halaman ───────────────────────────────────────────────────────
+WARNA_LOKET = {1: "#E74C3C", 2: "#E67E22", 3: "#F1C40F", 4: "#1ABC9C", 5: "#3498DB"}
+ICON_LOKET  = {1: "📄", 2: "🔄", 3: "🔑", 4: "🔍", 5: "🚚"}
+DAFTAR_LAYANAN = [
+    "Perpanjangan STNK Tahunan",
+    "Perpanjangan STNK 5 Tahunan",
+    "Balik Nama Kendaraan",
+    "Ganti STNK Hilang/Rusak",
+    "Mutasi Kendaraan",
+]
+PREFIX_MAP = {1: "A", 2: "B", 3: "C", 4: "D", 5: "E"}
+LOKET_MAP  = {v: i+1 for i, v in enumerate(DAFTAR_LAYANAN)}
+
+# ─── API Helpers ──────────────────────────────────────────────────────────────
+
+def api_get(path: str):
+    try:
+        r = requests.get(f"{BASE_URL}{path}", timeout=5)
+        return r.json() if r.ok else None
+    except Exception:
+        return None
+
+def api_post(path: str, body: dict = None):
+    try:
+        r = requests.post(f"{BASE_URL}{path}", json=body or {}, timeout=10)
+        return r.json(), r.status_code
+    except Exception as e:
+        return {"detail": str(e)}, 500
+
+def audio_url(key: str) -> str:
+    return f"{BASE_URL}/audio/{key}"
+
+def get_loket(jenis_layanan: str) -> int:
+    return LOKET_MAP.get(jenis_layanan, 1)
+
+# ─── Konfigurasi Halaman ──────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Antrian STNK - Samsat",
     page_icon="🚗",
@@ -14,7 +66,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ─── CSS Custom ───────────────────────────────────────────────────────────────
+# ─── CSS Custom (identik dengan app.py asli) ──────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -74,7 +126,6 @@ html, body, [class*="css"] {
     margin-top: 4px;
 }
 
-/* Banner tutup / di luar jam */
 .banner-tutup {
     background: linear-gradient(135deg, #2C2C2C, #1A1A1A);
     border: 2px solid #555;
@@ -84,11 +135,10 @@ html, body, [class*="css"] {
     margin: 12px 0;
     font-family: 'IBM Plex Mono', monospace;
 }
-.banner-tutup .icon { font-size: 2.5rem; }
+.banner-tutup .icon  { font-size: 2.5rem; }
 .banner-tutup .judul { font-size: 1.1rem; font-weight: 600; color: var(--emas); margin: 8px 0 4px; }
-.banner-tutup .info { font-size: 0.82rem; color: #888; }
+.banner-tutup .info  { font-size: 0.82rem; color: #888; }
 
-/* Kartu loket */
 .kartu-loket {
     background: var(--abu-tua);
     border: 1px solid #3A3A3A;
@@ -97,7 +147,7 @@ html, body, [class*="css"] {
     margin-bottom: 12px;
     transition: border-color 0.2s;
 }
-.kartu-loket.aktif { border-color: var(--emas); box-shadow: 0 0 16px rgba(243,156,18,0.12); }
+.kartu-loket.aktif  { border-color: var(--emas); box-shadow: 0 0 16px rgba(243,156,18,0.12); }
 .kartu-loket.kosong { border-color: #333; opacity: 0.7; }
 
 .loket-header {
@@ -144,7 +194,6 @@ html, body, [class*="css"] {
     margin-top: 2px;
 }
 
-/* Antrian menunggu */
 .antrian-item {
     background: var(--abu-tua);
     border: 1px solid #333;
@@ -162,12 +211,11 @@ html, body, [class*="css"] {
     width: 60px;
     min-width: 60px;
 }
-.info-pelanggan { flex: 1; }
-.nama-kecil { font-weight: 600; font-size: 0.9rem; }
-.detail-kecil { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: #888; margin-top: 2px; }
-.waktu-estimasi { font-family: 'IBM Plex Mono', monospace; font-size: 0.73rem; color: var(--emas); text-align: right; }
+.info-pelanggan  { flex: 1; }
+.nama-kecil      { font-weight: 600; font-size: 0.9rem; }
+.detail-kecil    { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: #888; margin-top: 2px; }
+.waktu-estimasi  { font-family: 'IBM Plex Mono', monospace; font-size: 0.73rem; color: var(--emas); text-align: right; }
 
-/* Stat card */
 .stat-card {
     background: var(--abu-tua);
     border-left: 4px solid var(--merah);
@@ -178,7 +226,6 @@ html, body, [class*="css"] {
 .stat-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 2px; color: #888; text-transform: uppercase; }
 .stat-value { font-family: 'Bebas Neue', sans-serif; font-size: 2.2rem; color: var(--emas); line-height: 1.1; }
 
-/* Riwayat */
 .riwayat-header {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.68rem;
@@ -205,7 +252,6 @@ html, body, [class*="css"] {
 .riwayat-item.loket-4 { border-left-color: #1ABC9C; }
 .riwayat-item.loket-5 { border-left-color: #3498DB; }
 
-/* Alert */
 .alert-sukses { background:rgba(39,174,96,0.15); border:1px solid #27AE60; border-radius:8px; padding:10px 14px; color:#2ECC71; font-family:'IBM Plex Mono',monospace; font-size:0.83rem; margin:6px 0; }
 .alert-info   { background:rgba(52,152,219,0.15); border:1px solid #2980B9; border-radius:8px; padding:10px 14px; color:#5DADE2; font-family:'IBM Plex Mono',monospace; font-size:0.83rem; margin:6px 0; }
 .alert-warning{ background:rgba(243,156,18,0.15); border:1px solid var(--emas); border-radius:8px; padding:10px 14px; color:var(--emas); font-family:'IBM Plex Mono',monospace; font-size:0.83rem; margin:6px 0; }
@@ -255,21 +301,31 @@ hr { border-color: var(--merah) !important; opacity: 0.3; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Warna per loket (untuk label) ────────────────────────────────────────────
-WARNA_LOKET = {1: "#E74C3C", 2: "#E67E22", 3: "#F1C40F", 4: "#1ABC9C", 5: "#3498DB"}
-ICON_LOKET  = {1: "📄", 2: "🔄", 3: "🔑", 4: "🔍", 5: "🚚"}
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║                     BAGIAN 2 — ALFA                                ║
+# ║  Meliputi: Inisialisasi session state, pengambilan data dari        ║
+# ║  backend, render header & ticker status, layout 3 kolom,           ║
+# ║  dan seluruh KOLOM KIRI (form pendaftaran, proses daftar/reset,    ║
+# ║  audio playback, dan statistik hari ini).                           ║
+# ╚══════════════════════════════════════════════════════════════════════╝
 
-# ─── Inisialisasi Session State ────────────────────────────────────────────────
-if "sistem" not in st.session_state:
-    st.session_state.sistem = SistemMultiLoket()
-if "audio_path" not in st.session_state:
-    st.session_state.audio_path = None
+# ─── Init Session State ───────────────────────────────────────────────────────
+if "audio_key" not in st.session_state:
+    st.session_state.audio_key = None
 
-sistem: SistemMultiLoket = st.session_state.sistem
+# ─── Ambil Data dari Backend ──────────────────────────────────────────────────
+info  = api_get("/info")
+state = api_get("/state")
 
-# ─── Cek Jam & Hari Pelayanan ─────────────────────────────────────────────────
-layanan_aktif, pesan_status = cek_jam_pelayanan()
-info_pelayanan = get_info_pelayanan()
+if not info or not state:
+    st.error("❌ Tidak dapat terhubung ke backend. Pastikan backend berjalan di `http://localhost:8000`.")
+    st.code("python -m uvicorn backend:app --reload --port 8000", language="bash")
+    st.stop()
+
+layanan_aktif = info.get("aktif", False)
+pesan_status  = info.get("pesan", "")
+statistik     = state.get("statistik", {})
+loket_data    = state.get("loket", {})
 
 # ─── Header ───────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -279,7 +335,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Ticker Info ──────────────────────────────────────────────────────────────
+# ─── Ticker ───────────────────────────────────────────────────────────────────
 hari_tanggal = datetime.now().strftime("%A, %d %B %Y")
 jam_sekarang = datetime.now().strftime("%H:%M")
 
@@ -300,7 +356,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-# ─── Banner Tutup (jika di luar jam/hari) ─────────────────────────────────────
+# ─── Banner Tutup ─────────────────────────────────────────────────────────────
 if not layanan_aktif:
     st.markdown(f"""
     <div class="banner-tutup">
@@ -314,8 +370,55 @@ if not layanan_aktif:
     """, unsafe_allow_html=True)
     st.markdown("---")
 
-# ─── Layout Utama (3 Kolom) ───────────────────────────────────────────────────
+# ─── Layout Utama 3 Kolom (identik dengan app.py asli) ───────────────────────
 col_kiri, col_tengah, col_kanan = st.columns([1.2, 1.8, 1.0])
+
+# ─── Inject warna background kolom via JavaScript ────────────────────────────
+st.markdown("""
+<script>
+(function applyColumnColors() {
+    const colors = [
+        {
+            bg: 'linear-gradient(160deg, #0D2137 0%, #0A1A2E 100%)',
+            border: '1px solid #1E4D7A',
+            shadow: '0 4px 24px rgba(0,80,160,0.25)'
+        },
+        {
+            bg: 'linear-gradient(160deg, #2A0E0E 0%, #1A0808 100%)',
+            border: '1px solid #7A1A1A',
+            shadow: '0 4px 24px rgba(160,20,20,0.25)'
+        },
+        {
+            bg: 'linear-gradient(160deg, #0A1F12 0%, #071510 100%)',
+            border: '1px solid #1A6B2A',
+            shadow: '0 4px 24px rgba(20,120,40,0.25)'
+        }
+    ];
+    function paint() {
+        const cols = document.querySelectorAll('[data-testid="stColumn"]');
+        if (cols.length >= 3) {
+            [0, 1, 2].forEach(i => {
+                cols[i].style.background   = colors[i].bg;
+                cols[i].style.border       = colors[i].border;
+                cols[i].style.borderRadius = '14px';
+                cols[i].style.padding      = '16px';
+                cols[i].style.boxShadow    = colors[i].shadow;
+            });
+        } else {
+            setTimeout(paint, 200);
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', paint);
+    } else {
+        paint();
+    }
+    // Re-apply setiap kali Streamlit re-render
+    const observer = new MutationObserver(paint);
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════
 # KOLOM KIRI – Form Pendaftaran & Statistik
@@ -329,10 +432,10 @@ with col_kiri:
         st.markdown('<div class="alert-info">ℹ Pendaftaran hanya dapat dilakukan pada Senin–Jumat pukul 08:00–16:00 WIB.</div>', unsafe_allow_html=True)
     else:
         with st.container():
-            nama       = st.text_input("👤 Nama Lengkap", placeholder="Masukkan nama sesuai BPKB...")
-            no_polisi  = st.text_input("🚘 Nomor Polisi", placeholder="Contoh: E 1234 AB").upper()
+            nama          = st.text_input("👤 Nama Lengkap", placeholder="Masukkan nama sesuai BPKB...")
+            no_polisi     = st.text_input("🚘 Nomor Polisi", placeholder="Contoh: E 1234 AB").upper()
             jenis_layanan = st.selectbox("🔧 Jenis Layanan", DAFTAR_LAYANAN)
-            no_hp      = st.text_input("📱 Nomor HP (opsional)", placeholder="08xxxxxxxxxx")
+            no_hp         = st.text_input("📱 Nomor HP (opsional)", placeholder="08xxxxxxxxxx")
 
             loket_preview = get_loket(jenis_layanan)
             st.markdown(f"""
@@ -356,44 +459,48 @@ with col_kiri:
             elif not no_polisi.strip():
                 st.markdown('<div class="alert-warning">⚠ Nomor polisi tidak boleh kosong!</div>', unsafe_allow_html=True)
             else:
-                data_pelanggan = {
-                    "nama":           nama.strip().title(),
-                    "no_polisi":      no_polisi.strip(),
-                    "jenis_layanan":  jenis_layanan,
-                    "no_hp":          no_hp.strip() or "-",
-                    "waktu_daftar":   format_waktu_sekarang(),
-                    "tanggal":        datetime.now().strftime("%d/%m/%Y"),
+                body = {
+                    "nama":          nama.strip(),
+                    "no_polisi":     no_polisi.strip(),
+                    "jenis_layanan": jenis_layanan,
+                    "no_hp":         no_hp.strip() or "-",
                 }
-                nomor = sistem.daftar(data_pelanggan)
-                loket = get_loket(jenis_layanan)
-                estimasi = get_estimasi_waktu(sistem.antrian[loket].ukuran())
+                resp, code = api_post("/daftar", body)
+                if code == 200:
+                    nomor    = resp["nomor"]
+                    loket    = resp["loket"]
+                    estimasi = resp["estimasi"]
+                    audio    = resp.get("audio")
+                    if audio:
+                        st.session_state.audio_key = audio
 
-                # TTS konfirmasi
-                pesan_tts = buat_pesan_daftar(nomor, nama.strip().title(), estimasi, loket)
-                audio_file = generate_audio_file(pesan_tts, f"daftar_{nomor}")
-                if audio_file:
-                    st.session_state.audio_path = audio_file
+                    st.markdown(f"""
+                    <div class="alert-sukses">
+                        ✅ Berhasil! Nomor antrian: <strong>{nomor}</strong><br>
+                        Loket: <strong>{loket}</strong> — {jenis_layanan}<br>
+                        Estimasi tunggu: ~{estimasi} menit
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.rerun()
+                else:
+                    st.markdown(f'<div class="alert-warning">⚠ {resp.get("detail","Gagal mendaftar")}</div>', unsafe_allow_html=True)
 
-                st.markdown(f"""
-                <div class="alert-sukses">
-                    ✅ Berhasil! Nomor antrian: <strong>{nomor}</strong><br>
-                    Loket: <strong>{loket}</strong> — {jenis_layanan}<br>
-                    Estimasi tunggu: ~{estimasi} menit
-                </div>
-                """, unsafe_allow_html=True)
-                st.rerun()
+        # Reset
+        if reset_btn:
+            api_post("/reset")
+            st.session_state.audio_key = None
+            st.rerun()
 
-    # Reset sistem
-    if 'reset_btn' in dir() and reset_btn:
-        sistem.reset()
-        st.session_state.audio_path = None
-        st.rerun()
-
-    # Audio
-    if st.session_state.audio_path and os.path.exists(st.session_state.audio_path):
-        with open(st.session_state.audio_path, "rb") as f:
-            st.audio(f.read(), format="audio/mp3", autoplay=True)
-        st.session_state.audio_path = None
+    # Audio playback
+    if st.session_state.audio_key:
+        url = audio_url(st.session_state.audio_key)
+        try:
+            r = requests.get(url, timeout=10)
+            if r.ok:
+                st.audio(r.content, format="audio/mp3", autoplay=True)
+        except Exception:
+            pass
+        st.session_state.audio_key = None
 
     # Statistik
     st.markdown("---")
@@ -402,38 +509,46 @@ with col_kiri:
     with col_s1:
         st.markdown(f"""<div class="stat-card">
             <div class="stat-label">Menunggu</div>
-            <div class="stat-value">{sistem.total_menunggu()}</div>
+            <div class="stat-value">{statistik.get('menunggu', 0)}</div>
         </div>""", unsafe_allow_html=True)
     with col_s2:
         st.markdown(f"""<div class="stat-card" style="border-left-color:#F39C12;">
             <div class="stat-label">Aktif</div>
-            <div class="stat-value" style="color:#F39C12;">{sistem.total_aktif()}</div>
+            <div class="stat-value" style="color:#F39C12;">{statistik.get('aktif', 0)}</div>
         </div>""", unsafe_allow_html=True)
     with col_s3:
         st.markdown(f"""<div class="stat-card" style="border-left-color:#27AE60;">
             <div class="stat-label">Selesai</div>
-            <div class="stat-value" style="color:#2ECC71;">{sistem.total_selesai()}</div>
+            <div class="stat-value" style="color:#2ECC71;">{statistik.get('selesai', 0)}</div>
         </div>""", unsafe_allow_html=True)
 
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║                     BAGIAN 3 — LEVI                                ║
+# ║  Meliputi: KOLOM TENGAH (panel 5 loket, tombol panggil & selesai,  ║
+# ║  daftar tunggu per loket) dan KOLOM KANAN (tab riwayat pelayanan   ║
+# ║  per loket & semua, info jam operasional, info nomor loket,        ║
+# ║  progress bar kapasitas, dan footer halaman).                       ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
 # ══════════════════════════════════════════════════════════════════════
-# KOLOM TENGAH – Panel Loket (5 Loket)
+# KOLOM TENGAH – Panel Multi-Loket
 # ══════════════════════════════════════════════════════════════════════
 with col_tengah:
     st.markdown("### 🖥️ Panel Multi-Loket")
     st.markdown("---")
 
-    # Iterasi tiap loket
     for loket in range(1, 6):
         nama_layanan = DAFTAR_LAYANAN[loket - 1]
         warna        = WARNA_LOKET[loket]
         icon         = ICON_LOKET[loket]
-        dilayani     = sistem.sedang_dilayani[loket]
-        jml_antrian  = sistem.antrian[loket].ukuran()
+        ld           = loket_data.get(str(loket), loket_data.get(loket, {}))
+        dilayani     = ld.get("sedang_dilayani")
+        jml_antrian  = ld.get("jumlah_antrian", 0)
+        berikutnya   = ld.get("berikutnya")
 
         kelas_kartu  = "aktif" if dilayani else "kosong"
-
-        # Tampilan kartu loket — header dulu, lalu isi terpisah
         border_color = warna if dilayani else "#3A3A3A"
+
         st.markdown(f"""
         <div class="kartu-loket {kelas_kartu}" style="border-color:{border_color};">
             <div class="loket-header">
@@ -463,44 +578,40 @@ with col_tengah:
             </div>
             """, unsafe_allow_html=True)
 
-        # Tombol Panggil & Selesai untuk tiap loket
+        # Tombol Panggil & Selesai
         c1, c2, c3 = st.columns([1, 1, 1])
         with c1:
-            panggil_disabled = sistem.antrian[loket].kosong() or dilayani is not None
+            panggil_disabled = (jml_antrian == 0) or (dilayani is not None)
             if st.button(
-                f"📢 Panggil",
+                "📢 Panggil",
                 key=f"panggil_{loket}",
                 use_container_width=True,
                 type="primary",
                 disabled=panggil_disabled
             ):
-                pelanggan = sistem.panggil(loket)
-                if pelanggan:
-                    pesan_tts = buat_pesan_panggil(pelanggan["nomor"], pelanggan["nama"], loket)
-                    audio_file = generate_audio_file(pesan_tts, f"panggil_{pelanggan['nomor']}")
-                    if audio_file:
-                        st.session_state.audio_path = audio_file
+                resp, code = api_post(f"/panggil/{loket}")
+                if code == 200:
+                    audio = resp.get("audio")
+                    if audio:
+                        st.session_state.audio_key = audio
                     st.rerun()
 
         with c2:
             selesai_disabled = dilayani is None
             if st.button(
-                f"✔ Selesai",
+                "✔ Selesai",
                 key=f"selesai_{loket}",
                 use_container_width=True,
                 disabled=selesai_disabled
             ):
-                hasil = sistem.selesai(loket)
-                if hasil:
-                    pesan_tts = buat_pesan_selesai(hasil["nama"], loket)
-                    audio_file = generate_audio_file(pesan_tts, f"selesai_{hasil['nomor']}")
-                    if audio_file:
-                        st.session_state.audio_path = audio_file
+                resp, code = api_post(f"/selesai/{loket}")
+                if code == 200:
+                    audio = resp.get("audio")
+                    if audio:
+                        st.session_state.audio_key = audio
                     st.rerun()
 
         with c3:
-            # Tampilkan antrian menunggu berikutnya di loket ini
-            berikutnya = sistem.antrian[loket].peek()
             if berikutnya:
                 st.markdown(f"""
                 <div style="font-family:'IBM Plex Mono',monospace; font-size:0.7rem;
@@ -511,26 +622,32 @@ with col_tengah:
                 </div>
                 """, unsafe_allow_html=True)
 
-        # Audio playback setelah tombol ditekan
-        if st.session_state.audio_path and os.path.exists(st.session_state.audio_path):
-            with open(st.session_state.audio_path, "rb") as f:
-                st.audio(f.read(), format="audio/mp3", autoplay=True)
-            st.session_state.audio_path = None
+        # Audio playback tombol loket
+        if st.session_state.audio_key:
+            url = audio_url(st.session_state.audio_key)
+            try:
+                r = requests.get(url, timeout=10)
+                if r.ok:
+                    st.audio(r.content, format="audio/mp3", autoplay=True)
+            except Exception:
+                pass
+            st.session_state.audio_key = None
 
         st.markdown('<hr style="margin:6px 0; opacity:0.1;">', unsafe_allow_html=True)
 
-    # ── Daftar Tunggu Per Loket ──
+    # Daftar Tunggu
     st.markdown("### 🕐 Daftar Tunggu")
     st.markdown("---")
 
     ada_antrian = False
     for loket in range(1, 6):
-        items = sistem.antrian[loket].lihat_semua()
+        ld    = loket_data.get(str(loket), loket_data.get(loket, {}))
+        items = ld.get("antrian", [])
         if not items:
             continue
-        ada_antrian = True
+        ada_antrian  = True
         nama_layanan = DAFTAR_LAYANAN[loket - 1]
-        warna = WARNA_LOKET[loket]
+        warna        = WARNA_LOKET[loket]
         st.markdown(f"""
         <div style="font-family:'IBM Plex Mono',monospace; font-size:0.7rem;
                     color:{warna}; letter-spacing:2px; text-transform:uppercase;
@@ -539,7 +656,7 @@ with col_tengah:
         </div>
         """, unsafe_allow_html=True)
         for i, item in enumerate(items):
-            estimasi = get_estimasi_waktu(i + 1)
+            estimasi = (i + 1) * 5
             st.markdown(f"""
             <div class="antrian-item">
                 <div class="nomor-kecil" style="color:{warna};">{item['nomor']}</div>
@@ -555,7 +672,7 @@ with col_tengah:
         st.markdown('<div class="alert-info">ℹ Semua antrian kosong.</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════
-# KOLOM KANAN – Riwayat Per Jenis Layanan & Info Dokumen
+# KOLOM KANAN – Riwayat & Info
 # ══════════════════════════════════════════════════════════════════════
 with col_kanan:
     st.markdown("### 📜 Riwayat Pelayanan")
@@ -566,9 +683,10 @@ with col_kanan:
 
     for idx, loket in enumerate(range(1, 6)):
         with tabs[idx]:
-            nama_layanan = DAFTAR_LAYANAN[loket - 1]
-            warna = WARNA_LOKET[loket]
-            riwayat_loket = sistem.riwayat[loket]
+            nama_layanan  = DAFTAR_LAYANAN[loket - 1]
+            warna         = WARNA_LOKET[loket]
+            ld            = loket_data.get(str(loket), loket_data.get(loket, {}))
+            riwayat_loket = ld.get("riwayat", [])
 
             st.markdown(f"""
             <div style="font-family:'IBM Plex Mono',monospace; font-size:0.68rem;
@@ -590,19 +708,18 @@ with col_kanan:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # Tab "Semua"
     with tabs[5]:
-        semua = sistem.semua_riwayat()
+        semua = state.get("semua_riwayat", [])
         if not semua:
             st.markdown('<div class="alert-info" style="font-size:0.78rem;">Belum ada riwayat hari ini.</div>', unsafe_allow_html=True)
         else:
             for item in semua[:20]:
-                loket = item.get("loket", 1)
-                warna = WARNA_LOKET.get(loket, "#888")
+                loket_r = item.get("loket", 1)
+                warna_r = WARNA_LOKET.get(loket_r, "#888")
                 st.markdown(f"""
-                <div class="riwayat-item loket-{loket}">
+                <div class="riwayat-item loket-{loket_r}">
                     ✅ [{item['nomor']}] <strong style="color:#DDD;">{item['nama']}</strong><br>
-                    <span style="color:{warna}; font-size:0.7rem;">{item['jenis_layanan']}</span><br>
+                    <span style="color:{warna_r}; font-size:0.7rem;">{item['jenis_layanan']}</span><br>
                     🕐 {item.get('waktu_selesai','—')}
                 </div>
                 """, unsafe_allow_html=True)
@@ -633,14 +750,13 @@ with col_kanan:
     </div>
     """, unsafe_allow_html=True)
     for loket in range(1, 6):
-        warna = WARNA_LOKET[loket]
+        warna        = WARNA_LOKET[loket]
         nama_layanan = DAFTAR_LAYANAN[loket - 1]
-        prefix = PREFIX_MAP[loket]
+        prefix       = PREFIX_MAP[loket]
         st.markdown(f"""
         <div style="font-family:'IBM Plex Mono',monospace; font-size:0.72rem;
                     margin-bottom:6px; padding:8px 12px;
-                    border-left:3px solid {warna}; background:#2C2C2C; border-radius:4px;
-                    display:flex; align-items:center; gap:8px;">
+                    border-left:3px solid {warna}; background:#2C2C2C; border-radius:4px;">
             <div>
                 <span style="color:{warna}; font-weight:700;">Loket {loket}</span>
                 &nbsp;<span style="color:#555; font-size:0.65rem;">[{prefix}001–{prefix}999]</span><br>
@@ -652,8 +768,11 @@ with col_kanan:
     st.markdown("---")
     # Progress bar kapasitas
     maks_kapasitas = 50
-    terisi = sistem.total_menunggu() + sistem.total_selesai() + sistem.total_aktif()
-    persen = min(terisi / maks_kapasitas, 1.0)
+    menunggu  = statistik.get("menunggu", 0)
+    aktif_now = statistik.get("aktif", 0)
+    selesai   = statistik.get("selesai", 0)
+    terisi    = menunggu + selesai + aktif_now
+    persen    = min(terisi / maks_kapasitas, 1.0)
     warna_bar = "#27AE60" if persen < 0.6 else "#F39C12" if persen < 0.85 else "#C0392B"
     st.markdown(f"""
     <div style="margin-bottom:6px;">
@@ -674,7 +793,7 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align:center; font-family:'IBM Plex Mono',monospace; font-size:0.72rem; color:#555; padding:12px 0;">
     SISTEM ANTRIAN FIFO MULTI-LOKET — PELAYANAN PERPANJANGAN STNK<br>
-    Jam Pelayanan: Senin–Jumat 08:00–16:00 WIB &nbsp;|&nbsp; Python + Streamlit + gTTS<br>
+    Jam Pelayanan: Senin–Jumat 08:00–16:00 WIB &nbsp;|&nbsp; Python + Streamlit + FastAPI + gTTS<br>
     <span style="color:#333;">──────────────────────────────</span>
 </div>
 """, unsafe_allow_html=True)

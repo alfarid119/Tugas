@@ -1,202 +1,189 @@
-# 🚗 Sistem Antrian FIFO Multi-Loket — Samsat STNK
+# 🚗 Sistem Antrian STNK Samsat
 
-Aplikasi manajemen antrian pelayanan perpanjangan STNK berbasis **FIFO (First In First Out)** dengan struktur data **Linked List**. Tersedia dalam dua mode: antarmuka web via **Streamlit** dan mode **Console/Terminal**.
-
----
-
-## 📋 Fitur Utama
-
-- **5 loket pelayanan independen** — setiap loket punya antrian, counter, dan riwayat sendiri
-- **Struktur data Linked List** — operasi enqueue/dequeue O(1)
-- **Text-to-Speech (TTS)** — pengumuman suara otomatis saat memanggil/mendaftarkan pelanggan
-- **Validasi jam pelayanan** — sistem hanya aktif Senin–Jumat, 08:00–16:00 WIB
-- **Estimasi waktu tunggu** — dihitung otomatis berdasarkan posisi antrian
-- **Riwayat pelayanan** — tercatat lengkap per loket maupun gabungan semua loket
-- **Dua mode tampilan** — Web UI (Streamlit) dan Console/Terminal
+Aplikasi sistem antrian digital untuk pelayanan STNK Samsat berbasis **FastAPI** (backend) dan **Streamlit** (frontend), dengan dukungan Text-to-Speech (TTS) menggunakan **gTTS**.
 
 ---
 
-## 🏢 Konfigurasi Loket
-
-| Loket | Kode Antrian | Jenis Layanan                  |
-|-------|:------------:|-------------------------------|
-| 1     | A001–A999    | Perpanjangan STNK Tahunan     |
-| 2     | B001–B999    | Perpanjangan STNK 5 Tahunan   |
-| 3     | C001–C999    | Balik Nama Kendaraan          |
-| 4     | D001–D999    | Ganti STNK Hilang/Rusak       |
-| 5     | E001–E999    | Mutasi Kendaraan              |
-
----
-
-## 🗂️ Struktur Proyek
+## 📁 Struktur Proyek
 
 ```
 .
-├── app.py              # Antarmuka web (Streamlit)
-├── console_app.py      # Mode terminal/console
-├── queue_system.py     # Inti logika antrian FIFO & multi-loket
-├── tts_helper.py       # Modul Text-to-Speech (gTTS)
-├── utils.py            # Fungsi utilitas (validasi, format, jam pelayanan)
-└── README.md
+├── backend.py      # API server (FastAPI) — logika antrian FIFO multi-loket + TTS
+└── frontend.py     # Tampilan UI (Streamlit) — dashboard antrian real-time
 ```
 
 ---
 
-## ⚙️ Instalasi
+## ⚙️ Persyaratan Sistem
 
-### Prasyarat
+- Python **3.8+**
+- pip
 
-- Python 3.10 atau lebih baru
-
-### 1. Clone / unduh repositori
-
-```bash
-git clone <url-repo>
-cd <nama-folder>
-```
-
-### 2. Install dependensi
+### Instalasi Dependensi
 
 ```bash
-pip install streamlit gtts
-```
+# Backend
+pip install fastapi uvicorn gtts
 
-Opsional untuk memutar audio di console:
-
-```bash
-pip install playsound
-# atau
-pip install pygame
+# Frontend
+pip install streamlit requests
 ```
 
 ---
 
 ## 🚀 Cara Menjalankan
 
-### Mode Web (Streamlit)
+> Backend **harus** dijalankan terlebih dahulu sebelum frontend.
+
+### 1. Jalankan Backend
 
 ```bash
-streamlit run app.py
+python -m uvicorn backend:app --reload --port 8000
 ```
 
-Buka browser di `http://localhost:8501`
+Backend akan berjalan di: `http://localhost:8000`
 
-### Mode Console / Terminal
+### 2. Jalankan Frontend
 
 ```bash
-python console_app.py
+streamlit run frontend.py
 ```
 
-### Demo / Test Sistem Antrian
-
-```bash
-python queue_system.py
-```
-
-### Test Utilitas
-
-```bash
-python utils.py
-```
-
-### Test TTS
-
-```bash
-python tts_helper.py
-```
+Frontend akan terbuka otomatis di browser (default: `http://localhost:8501`)
 
 ---
 
-## 🖥️ Tampilan Aplikasi
-
-### Web UI (Streamlit)
-
-- **Sidebar** — Form pendaftaran antrian baru beserta statistik ringkas (menunggu, aktif, selesai)
-- **Kolom Tengah** — Panel kontrol per loket: tombol Panggil & Selesai, daftar tunggu real-time
-- **Kolom Kanan** — Riwayat pelayanan per loket (tab) + info jam pelayanan + progress kapasitas harian
-- **Audio otomatis** — Pengumuman diputar langsung di browser saat memanggil pelanggan
-
-### Console / Terminal
+## 🏛️ Arsitektur
 
 ```
-Menu Utama:
-  [1]  Daftar Antrian Baru
-  [2]  Panggil Pelanggan (pilih loket)
-  [3]  Selesaikan Pelayanan (pilih loket)
-  [4]  Lihat Semua Antrian
-  [5]  Riwayat per Jenis Layanan
-  [6]  Statistik
-  [0]  Keluar
+┌─────────────────┐        HTTP/REST        ┌──────────────────────┐
+│  frontend.py    │ ──────────────────────► │  backend.py          │
+│  (Streamlit)    │ ◄────────────────────── │  (FastAPI :8000)     │
+│                 │    JSON + Audio URL      │                      │
+│  • Form daftar  │                          │  • Antrian FIFO      │
+│  • Loket view   │                          │  • Multi-loket (1–5) │
+│  • Riwayat      │                          │  • TTS (gTTS)        │
+│  • Audio TTS    │                          │  • REST Endpoints    │
+└─────────────────┘                          └──────────────────────┘
 ```
 
 ---
 
-## 🔧 Penjelasan Modul
+## 🗂️ Loket & Jenis Layanan
 
-### `queue_system.py`
+| Loket | Prefix | Jenis Layanan                   |
+|-------|--------|----------------------------------|
+| 1     | A      | Perpanjangan STNK Tahunan        |
+| 2     | B      | Perpanjangan STNK 5 Tahunan      |
+| 3     | C      | Balik Nama Kendaraan             |
+| 4     | D      | Ganti STNK Hilang/Rusak          |
+| 5     | E      | Mutasi Kendaraan                 |
 
-Inti sistem antrian. Berisi tiga kelas utama:
-
-- **`Node`** — Simpul linked list yang menyimpan data pelanggan
-- **`AntrianFIFO`** — Implementasi antrian dengan operasi `enqueue`, `dequeue`, `peek`, dan `lihat_semua`
-- **`SistemMultiLoket`** — Orkestrasi 5 loket secara independen, mengelola antrian, status pelayanan, counter nomor, dan riwayat
-
-### `tts_helper.py`
-
-Modul Text-to-Speech menggunakan **gTTS**. Menyediakan fungsi:
-
-- `generate_audio_file()` — membuat file MP3 dari teks
-- `speak_text()` — memutar audio (mendukung playsound, pygame, mpg123, ffplay)
-- `buat_pesan_panggil()` — template pengumuman pemanggilan
-- `buat_pesan_daftar()` — template konfirmasi pendaftaran
-- `buat_pesan_selesai()` — template pengumuman selesai dilayani
-
-### `utils.py`
-
-Fungsi-fungsi pembantu:
-
-- `cek_jam_pelayanan()` — validasi hari dan jam aktif
-- `get_info_pelayanan()` — info status layanan lengkap
-- `format_nomor_antrian()` — format nomor dengan prefix dan zero-padding
-- `get_estimasi_waktu()` — hitung estimasi tunggu (default 5 menit/pelanggan)
-- `validasi_nomor_polisi()` — validasi format plat nomor Indonesia
-- `validasi_nomor_hp()` — validasi format nomor HP Indonesia
-- `hitung_durasi_pelayanan()` — hitung durasi dari dua timestamp
+Format nomor antrian: `[Prefix][001–999]` — contoh: `A001`, `B023`, `E005`
 
 ---
 
-## 📐 Kompleksitas Algoritma
+## 📡 API Endpoints (Backend)
 
-| Operasi          | Kompleksitas |
-|------------------|:------------:|
-| Enqueue (masuk)  | O(1)         |
-| Dequeue (keluar) | O(1)         |
-| Peek (lihat)     | O(1)         |
-| Lihat semua      | O(n)         |
-| Ukuran antrian   | O(1)         |
+| Method | Endpoint           | Deskripsi                                  |
+|--------|--------------------|--------------------------------------------|
+| GET    | `/info`            | Status & jam pelayanan saat ini            |
+| GET    | `/state`           | State lengkap semua loket + statistik      |
+| GET    | `/layanan`         | Daftar jenis layanan & peta loket          |
+| POST   | `/daftar`          | Daftarkan pelanggan baru ke antrian        |
+| POST   | `/panggil/{loket}` | Panggil nomor antrian berikutnya           |
+| POST   | `/selesai/{loket}` | Tandai pelayanan loket selesai             |
+| POST   | `/reset`           | Reset seluruh sistem antrian               |
+| GET    | `/audio/{nama}`    | Unduh/stream file audio TTS (.mp3)         |
+
+### Contoh Request `/daftar`
+
+```json
+POST /daftar
+{
+  "nama": "Budi Santoso",
+  "no_polisi": "B 1234 ABC",
+  "jenis_layanan": "Perpanjangan STNK Tahunan",
+  "no_hp": "08123456789"
+}
+```
+
+### Contoh Response `/daftar`
+
+```json
+{
+  "nomor": "A001",
+  "loket": 1,
+  "estimasi": 10,
+  "audio": "daftar_A001",
+  "pesan": "Berhasil! Nomor antrian: A001 — Loket 1"
+}
+```
 
 ---
 
-## ⏰ Jam Pelayanan
+## 🖥️ Fitur Frontend
 
-| Hari              | Jam                  |
-|-------------------|----------------------|
-| Senin – Jumat     | 08:00 – 16:00 WIB   |
-| Sabtu & Minggu    | Libur                |
-
-Pendaftaran antrian baru hanya dapat dilakukan dalam jam pelayanan aktif.
-
----
-
-## 🛠️ Teknologi
-
-- **Python 3.10+**
-- **Streamlit** — antarmuka web
-- **gTTS (Google Text-to-Speech)** — pengumuman suara
-- **Linked List** — struktur data antrian FIFO
+- **Sidebar** — Form pendaftaran antrian (nama, nomor polisi, jenis layanan, nomor HP)
+- **Kolom Kiri** — Statistik ringkasan: menunggu, sedang dilayani, selesai
+- **Kolom Tengah** — Status real-time per loket, tombol Panggil & Selesai, daftar tunggu
+- **Kolom Kanan** — Riwayat pelayanan per loket, info jam & hari pelayanan, info nomor loket, indikator kapasitas
+- **Audio TTS** — Pengumuman suara otomatis dalam Bahasa Indonesia saat daftar, panggil, dan selesai
 
 ---
 
-## 📄 Lisensi
+## 🔊 Text-to-Speech (TTS)
 
-Proyek ini dibuat untuk keperluan edukasi dan demonstrasi implementasi struktur data antrian FIFO dalam konteks pelayanan publik.
+Audio dihasilkan secara otomatis menggunakan **gTTS** (Google Text-to-Speech) dalam Bahasa Indonesia untuk tiga momen:
+
+| Momen     | Contoh Pesan                                                                 |
+|-----------|------------------------------------------------------------------------------|
+| Daftar    | "Selamat datang, Budi. Nomor antrian Anda adalah A001, untuk loket 1..."     |
+| Panggil   | "Perhatian. Nomor antrian A001, atas nama Budi, dimohon segera menuju loket 1..." |
+| Selesai   | "Pelayanan atas nama Budi di loket 1 telah selesai. Terima kasih..."         |
+
+File audio disimpan sementara di direktori `tempfile.gettempdir()` dan diakses melalui endpoint `/audio/{nama_file}`.
+
+> Jika gTTS gagal (misal: tidak ada koneksi internet), sistem tetap berjalan tanpa audio.
+
+---
+
+## ⏰ Jam & Hari Pelayanan
+
+| Keterangan | Nilai                  |
+|------------|------------------------|
+| Hari aktif | Senin – Jumat          |
+| Jam buka   | 08:00 WIB              |
+| Jam tutup  | 16:00 WIB              |
+| Hari libur | Sabtu & Minggu         |
+
+> Catatan: Validasi jam pelayanan di backend saat ini dikonfigurasi selalu aktif (`cek_jam_pelayanan` mengembalikan `True`). Untuk mengaktifkan pembatasan jam, sesuaikan fungsi tersebut di `backend.py`.
+
+---
+
+## 🧠 Struktur Data
+
+Backend menggunakan implementasi **FIFO (First In, First Out)** secara manual menggunakan *linked list* (`Node` + `AntrianFIFO`), bukan `collections.deque`, untuk keperluan edukasi dan transparansi algoritma.
+
+```
+Antrian FIFO:
+  enqueue() → tambah ke belakang
+  dequeue() → ambil dari depan
+  peek()    → lihat depan tanpa menghapus
+```
+
+---
+
+## 🔧 Konfigurasi
+
+Ubah nilai berikut di `frontend.py` jika backend berjalan di host/port berbeda:
+
+```python
+BASE_URL = "http://localhost:8000"
+```
+
+---
+
+## 📝 Lisensi
+
+Proyek ini dibuat untuk keperluan edukasi dan simulasi sistem antrian pelayanan publik.
